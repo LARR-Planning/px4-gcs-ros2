@@ -5,19 +5,21 @@
 #ifndef PX4_GCS_ROS2_PX4_GCS_ROS2_H
 #define PX4_GCS_ROS2_PX4_GCS_ROS2_H
 
-#include "rclcpp/rclcpp.hpp"
 #include "px4_gcs_interfaces/srv/init_home.hpp"
 #include "px4_gcs_interfaces/srv/keyboard_input.hpp"
 #include "px4_gcs_interfaces/srv/switch_mode.hpp"
+
 #include "px4_msgs/msg/vehicle_odometry.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "tf2_ros/transform_broadcaster.h"
-#include "tf2_ros/transform_listener.h"
+#include "rclcpp/rclcpp.hpp"
+
 #include "tf2/transform_datatypes.h"
 #include "tf2_eigen/tf2_eigen.h"
-
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
+#include <chrono>
 #include <Eigen/Core>
 
+using namespace std::chrono_literals;
 using InitHomeService = px4_gcs_interfaces::srv::InitHome;
 using InitHomeServer = rclcpp::Service<InitHomeService>::SharedPtr;
 using KeyboardInputService = px4_gcs_interfaces::srv::KeyboardInput;
@@ -34,61 +36,76 @@ using CurrentPoseRtpsSubscriber = rclcpp::Subscription<LocalPoseRtps>::SharedPtr
 using CurrentPoseExternalSubscriber = rclcpp::Subscription<LocalPoseExternal>::SharedPtr;
 using GoalPoseSubscriber = rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr;
 
+using RosTimer = rclcpp::TimerBase::SharedPtr;
+
+using RtpsPoseVis = geometry_msgs::msg::PoseStamped;
+using ExternalPoseVis = geometry_msgs::msg::PoseStamped;
+
+using RtpsPosePublisher = rclcpp::Publisher<RtpsPoseVis>::SharedPtr;
+using ExternalPosePublihser = rclcpp::Publisher<ExternalPoseVis>::SharedPtr;
+using LocalGoalPosePublisher = rclcpp::Publisher<LocalGoalPose>::SharedPtr;
+
 namespace px4_gcs {
-    class Px4GcsWrapper : public rclcpp::Node {
-    private:
-        bool is_tf_received_ = false;
-        bool is_rtps_pose_received_ = false;
-        bool is_init_mav_ = false;
-        bool is_planning_received_ = false;
+class Px4GcsWrapper : public rclcpp::Node {
+private:
+  struct{
+    RtpsPosePublisher rtps_pose_publisher;
+    ExternalPosePublihser external_pose_publisher;
+    LocalGoalPosePublisher local_goal_pose_publisher;
+  }publisher_;
+  rclcpp::CallbackGroup::SharedPtr publisher_callback_group_;
+  RosTimer publisher_timer_;
 
-        double increment_xyz_;
-        double increment_yaw_;
+  void PublisherTimerCallback();
 
-        LocalGoalPose pose_des_keyboard_;
-        LocalGoalPose pose_des_planner_;
-        LocalPoseDefault pose_external_;
-        LocalPoseDefault pose_rtps_;
-        LocalPoseDefault pose_init_;
+  bool is_tf_received_ = false;
+  bool is_rtps_pose_received_ = false;
+  bool is_init_mav_ = false;
+  bool is_planning_received_ = false;
 
-        unsigned int mode_ = 0;
+  double increment_xyz_;
+  double increment_yaw_;
 
-        // Service
-        InitHomeServer init_home_server_;
-        KeyboardInputServer keyboard_input_server_;
-        SwitchModeServer switch_mode_server_;
-        bool InitHomeCallback(const std::shared_ptr<InitHomeService::Request> request,
-                              std::shared_ptr<InitHomeService::Response> response);
+  LocalGoalPose pose_des_keyboard_;
+  LocalGoalPose pose_des_planner_;
+  LocalPoseDefault pose_external_;
+  LocalPoseDefault pose_rtps_;
+  LocalPoseDefault pose_init_;
 
-        bool KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> request,
-                                   std::shared_ptr<KeyboardInputService::Response> response);
+  unsigned int mode_ = 0;
 
-        bool SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> request,
-                                std::shared_ptr<SwitchModeService::Response> response);
+  // Service
+  InitHomeServer init_home_server_;
+  KeyboardInputServer keyboard_input_server_;
+  SwitchModeServer switch_mode_server_;
+  bool InitHomeCallback(const std::shared_ptr<InitHomeService::Request> request,
+                        std::shared_ptr<InitHomeService::Response> response);
 
-        // mav initialization
-        bool mav_init();
-        bool move_mav(const double &dx, const double &dy, const double &dz, const double &dyaw);
-        // Subscriber
-        CurrentPoseRtpsSubscriber current_pose_rtps_subscriber_;
-        CurrentPoseExternalSubscriber current_pose_external_subscriber_;
-        GoalPoseSubscriber goal_pose_subscriber_;
+  bool KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> request,
+                             std::shared_ptr<KeyboardInputService::Response> response);
 
-        // Subscriber Callback
-        void ExternalPoseCallback(const LocalPoseExternal::SharedPtr msg);
-        void RtpsPoseCallback(const LocalPoseRtps::SharedPtr msg);
-        void GoalPoseCallback(const LocalGoalPose::SharedPtr msg);
-        // Publisher
+  bool SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> request,
+                          std::shared_ptr<SwitchModeService::Response> response);
 
+  // mav initialization
+  bool mav_init();
+  bool move_mav(const double &dx, const double &dy, const double &dz, const double &dyaw);
+  // Subscriber
+  CurrentPoseRtpsSubscriber current_pose_rtps_subscriber_;
+  CurrentPoseExternalSubscriber current_pose_external_subscriber_;
+  GoalPoseSubscriber goal_pose_subscriber_;
 
-    public:
-        Px4GcsWrapper();
-        explicit Px4GcsWrapper(const rclcpp::NodeOptions &options_input);
+  // Subscriber Callback
+  void ExternalPoseCallback(const LocalPoseExternal::SharedPtr msg);
+  void RtpsPoseCallback(const LocalPoseRtps::SharedPtr msg);
+  void GoalPoseCallback(const LocalGoalPose::SharedPtr msg);
+  // Publisher
 
+public:
+  Px4GcsWrapper();
+  explicit Px4GcsWrapper(const rclcpp::NodeOptions &options_input);
+};
 
+} // namespace px4_gcs
 
-    };
-
-}   // namespace px4_gcs
-
-#endif //PX4_GCS_ROS2_PX4_GCS_ROS2_H
+#endif // PX4_GCS_ROS2_PX4_GCS_ROS2_H

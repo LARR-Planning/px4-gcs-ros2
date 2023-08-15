@@ -21,14 +21,24 @@ add_library(px4_gcs_wrapper src/px4_gcs_ros2/px4_gcs_wrapper.cc)
 ament_target_dependencies(px4_gcs_wrapper rclcpp geometry_msgs nav_msgs visualization_msgs tf2 tf2_ros tf2_eigen px4_gcs_interfaces px4_msgs)
 
 target_include_directories(
-		px4_gcs_wrapper PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-		$<INSTALL_INTERFACE:include>)
+        px4_gcs_wrapper PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
 
 install(FILES include/${PROJECT_NAME}/px4_gcs_wrapper.h
-		DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}/px4_gcs_wrapper)
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}/px4_gcs_wrapper)
+
+#add_library(px4_gcs_publisher src/px4_gcs_ros2/publisher.cc)
+#ament_target_dependencies(px4_gcs_publisher rclcpp geometry_msgs nav_msgs visualization_msgs tf2 tf2_ros tf2_eigen)
+#target_include_directories(
+#        px4_gcs_publisher PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+#        $<INSTALL_INTERFACE:include>)
+#
+#install(FILES include/${PROJECT_NAME}/publisher.h
+#        DESTINATION ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}/px4_gcs_publisher)
+
 
 add_executable(px4_gcs_ros2_node src/px4_gcs_ros2/px4_gcs_wrapper_node.cc)
-target_link_libraries(px4_gcs_ros2_node px4_gcs_wrapper  Eigen3::Eigen)
+target_link_libraries(px4_gcs_ros2_node px4_gcs_wrapper Eigen3::Eigen)
 install(TARGETS px4_gcs_ros2_node DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
