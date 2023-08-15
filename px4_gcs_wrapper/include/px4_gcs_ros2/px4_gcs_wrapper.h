@@ -40,6 +40,7 @@ namespace px4_gcs {
         bool is_tf_received_ = false;
         bool is_rtps_pose_received_ = false;
         bool is_init_mav_ = false;
+        bool is_planning_received_ = false;
 
         double increment_xyz_;
         double increment_yaw_;
@@ -50,20 +51,20 @@ namespace px4_gcs {
         LocalPoseDefault pose_rtps_;
         LocalPoseDefault pose_init_;
 
-        unsigned int mode = 0;
+        unsigned int mode_ = 0;
 
         // Service
         InitHomeServer init_home_server_;
         KeyboardInputServer keyboard_input_server_;
         SwitchModeServer switch_mode_server_;
-        bool InitHomeCallback(const std::shared_ptr<InitHomeService::Request> &request,
-                              std::shared_ptr<InitHomeService::Response> &response);
+        bool InitHomeCallback(const std::shared_ptr<InitHomeService::Request> request,
+                              std::shared_ptr<InitHomeService::Response> response);
 
-        bool KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> &request,
-                                   std::shared_ptr<KeyboardInputService::Response> &response);
+        bool KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> request,
+                                   std::shared_ptr<KeyboardInputService::Response> response);
 
-        bool SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> &request,
-                                std::shared_ptr<SwitchModeService::Response> &response);
+        bool SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> request,
+                                std::shared_ptr<SwitchModeService::Response> response);
 
         // mav initialization
         bool mav_init();

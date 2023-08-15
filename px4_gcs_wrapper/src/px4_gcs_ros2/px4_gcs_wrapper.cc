@@ -7,6 +7,7 @@ px4_gcs::Px4GcsWrapper::Px4GcsWrapper() : Node("px4_gcs_wrapper") {
 
 px4_gcs::Px4GcsWrapper::Px4GcsWrapper(const rclcpp::NodeOptions &options_input) : Node("px4_gcs_wrapper",
                                                                                        options_input) {
+    // Subscriber
     rclcpp::SubscriptionOptions options;
     {   // subscriber group
         options.callback_group = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -22,8 +23,13 @@ px4_gcs::Px4GcsWrapper::Px4GcsWrapper(const rclcpp::NodeOptions &options_input) 
         options.callback_group = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
         goal_pose_subscriber_ = create_subscription<LocalGoalPose>("~/local_goal_pose", rclcpp::QoS(1), std::bind(
                 &Px4GcsWrapper::GoalPoseCallback, this, std::placeholders::_1), options);
-
     }
+    // Server
+    init_home_server_ = this->create_service<InitHomeService>("~/init_home",std::bind(&Px4GcsWrapper::InitHomeCallback,this,std::placeholders::_1, std::placeholders::_2));
+    keyboard_input_server_ = this->create_service<KeyboardInputService>("~/keyboard_input",std::bind(&Px4GcsWrapper::KeyboardInputCallback,this,std::placeholders::_1,std::placeholders::_2));
+    switch_mode_server_ = this->create_service<SwitchModeService>("~/switch_mode",std::bind(&Px4GcsWrapper::SwitchModeCallback,this,std::placeholders::_1,std::placeholders::_2));
+
+
 }
 
 bool px4_gcs::Px4GcsWrapper::mav_init() {
@@ -46,14 +52,14 @@ bool px4_gcs::Px4GcsWrapper::mav_init() {
     }
 }
 
-bool px4_gcs::Px4GcsWrapper::InitHomeCallback(const std::shared_ptr<InitHomeService::Request> &request,
-                                              std::shared_ptr<InitHomeService::Response> &response) {
+bool px4_gcs::Px4GcsWrapper::InitHomeCallback(const std::shared_ptr<InitHomeService::Request> request,
+                                              std::shared_ptr<InitHomeService::Response> response) {
     response->is_success = mav_init();
     return true;
 }
 
-bool px4_gcs::Px4GcsWrapper::KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> &request,
-                                                   std::shared_ptr<KeyboardInputService::Response> &response) {
+bool px4_gcs::Px4GcsWrapper::KeyboardInputCallback(const std::shared_ptr<KeyboardInputService::Request> request,
+                                                   std::shared_ptr<KeyboardInputService::Response> response) {
     std::string keyinput = request->key;
     bool is_success = false;
     // double increment_xyz = 0.05;
@@ -114,9 +120,23 @@ bool px4_gcs::Px4GcsWrapper::KeyboardInputCallback(const std::shared_ptr<Keyboar
 //    return move_mav(move_pose(0), move_pose(1), move_pose(2), move_pose(3));
 }
 
-bool px4_gcs::Px4GcsWrapper::SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> &request,
-                                                std::shared_ptr<SwitchModeService::Response> &response) {
-
+bool px4_gcs::Px4GcsWrapper::SwitchModeCallback(const std::shared_ptr<SwitchModeService::Request> request,
+                                                std::shared_ptr<SwitchModeService::Response> response) {
+    if (request->mode == 0) { // Keyboard Mode Requested
+        if (mav_init()) {
+            mode_ = 0;
+            return true;
+        } else {
+            RCLCPP_WARN(get_logger(), "[PX4 GCS Wrapper] Mav init was denied. Is is listening tf?");
+            return false;
+        }
+    } else {  // Planning Mode Requested
+        if (is_planning_received_) {
+            mode_ = 1;
+            return true;
+        } else
+            return false;
+    }
 }
 
 void px4_gcs::Px4GcsWrapper::ExternalPoseCallback(const LocalPoseExternal::SharedPtr msg) {
@@ -160,15 +180,13 @@ void px4_gcs::Px4GcsWrapper::GoalPoseCallback(const geometry_msgs::msg::PoseStam
 }
 
 bool px4_gcs::Px4GcsWrapper::move_mav(const double &dx, const double &dy, const double &dz, const double &dyaw) {
-    if(mode == 0 and is_init_mav_){
+    if (mode_ == 0 and is_init_mav_) {
         Eigen::Vector3d dpose(dx, dy, dz);
-
         tf2::Quaternion q_cur_des;
         q_cur_des.setX(pose_des_keyboard_.pose.orientation.x);
         q_cur_des.setY(pose_des_keyboard_.pose.orientation.y);
         q_cur_des.setZ(pose_des_keyboard_.pose.orientation.z);
         q_cur_des.setW(pose_des_keyboard_.pose.orientation.w);
-
 
         geometry_msgs::msg::TransformStamped transfrom_cur;
         transfrom_cur.transform.translation.x = 0.0;
@@ -181,12 +199,10 @@ bool px4_gcs::Px4GcsWrapper::move_mav(const double &dx, const double &dy, const 
 
         Eigen::Isometry3d Twb = tf2::transformToEigen(transfrom_cur);
         Eigen::Vector3d dpose_w = Twb * dpose;
-
         // Step 1: modify xyz
         pose_des_keyboard_.pose.position.x += dpose_w(0);
         pose_des_keyboard_.pose.position.y += dpose_w(1);
         pose_des_keyboard_.pose.position.z += dpose_w(2);
-
         // Step 2: modify yaw direcion
         double roll, pitch, yaw;
         tf2::Matrix3x3(q_cur_des).getEulerYPR(yaw, pitch, roll);
@@ -198,14 +214,13 @@ bool px4_gcs::Px4GcsWrapper::move_mav(const double &dx, const double &dy, const 
         pose_des_keyboard_.pose.orientation.y = q_des.getY();
         pose_des_keyboard_.pose.orientation.z = q_des.getZ();
         pose_des_keyboard_.pose.orientation.w = q_des.getW();
-
         return true;
-    }
-    else{
-        if (not mode == 0)
-            RCLCPP_WARN_STREAM_SKIPFIRST(get_logger(),"MAV receives planning setpoint. To enable keyboard, switch mode.");
+    } else {
+        if (not mode_ == 0)
+            RCLCPP_WARN_STREAM_SKIPFIRST(get_logger(),
+                                         "MAV receives planning setpoint. To enable keyboard, switch mode.");
         else
-            RCLCPP_WARN_STREAM_SKIPFIRST(get_logger(),"Homing point not initialized.");
+            RCLCPP_WARN_STREAM_SKIPFIRST(get_logger(), "Homing point not initialized.");
         return false;
     }
 
